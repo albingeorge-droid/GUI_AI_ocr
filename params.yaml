@@ -1,0 +1,13 @@
+ocr:
+  bucket: "guai"
+  region: "us-east-2"
+
+  model_id: "us.meta.llama4-scout-17b-instruct-v1:0"
+  dpi: 250
+  temperature: 0.0
+  max_tokens: 2500
+  retries: 6
+
+phoenix:
+  otlp_endpoint: "http://localhost:4317"
+  service_name: "bedrock-pdf-ocr"
