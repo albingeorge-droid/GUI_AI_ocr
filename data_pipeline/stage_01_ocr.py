@@ -186,12 +186,12 @@ def run_stage_01_ocr_from_s3(
                     logger.info("  OCR page %d/%d", i, total_pages)
 
                     # ✅ auto-fix sideways/rotated pages
-                    png_bytes, angle = auto_rotate_png_bytes(png_bytes)
+                    # png_bytes, angle = auto_rotate_png_bytes(png_bytes)
 
-                    if angle != 0:
-                        logger.info("  Applied auto-rotation for page %d -> %d°", i, angle)
-                    else:
-                        logger.info("  No rotation needed for page %d -> 0°", i)
+                    # if angle != 0:
+                    #     logger.info("  Applied auto-rotation for page %d -> %d°", i, angle)
+                    # else:
+                    #     logger.info("  No rotation needed for page %d -> 0°", i)
 
 
                     # Each bedrock call will create its own ROOT trace/span in Phoenix
@@ -210,10 +210,10 @@ def run_stage_01_ocr_from_s3(
                             "ocr.output_s3_key": out_json_s3_key,
                             "doc.page_number": i,
                             "doc.total_pages": total_pages,
-                            "doc.rotation_degrees": angle,
+                            # "doc.rotation_degrees": angle,
                         },
                     )
-                    results.append({"page": i, "rotation_degrees": angle, "text": page_text})
+                    results.append({"page": i, "text": page_text})
 
                 payload = {
                     "s3": {"bucket": bucket, "key": key},

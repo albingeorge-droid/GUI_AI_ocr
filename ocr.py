@@ -1,4 +1,6 @@
-# python ocr.py --pdf "C:\Users\albin\Documents\GitHub\GUI_AI_ocr\CLU_TRY\plot_3.pdf" --max_pages 3 --debug-creds
+# Example usage:
+#   python ocr.py --pdf "C:\Users\albin\Documents\GitHub\GUI_AI_ocr\MASTER_PDFS" --recursive
+#   python ocr.py --pdf "C:\Users\albin\Documents\GitHub\GUI_AI_ocr\MASTER_PDFS\106_CLU_GN-1953.pdf"
 
 import argparse
 import json
@@ -129,7 +131,6 @@ def bedrock_converse_ocr_page(
                     },
                 )
 
-                # ---- ADD THESE LINES (for Phoenix token tracking) ----
                 # Mark this span as an LLM span (Phoenix recognizes this)
                 span.set_attribute("openinference.span.kind", "LLM")
                 span.set_attribute("llm.model_name", model_id)
@@ -163,13 +164,11 @@ def bedrock_converse_ocr_page(
                 span.set_attribute("bedrock.usage.input_tokens", int(input_tokens))
                 span.set_attribute("bedrock.usage.output_tokens", int(output_tokens))
                 span.set_attribute("bedrock.usage.total_tokens", int(total_tokens))
-                # ---- END ADD ----
 
                 out_msg = resp.get("output", {}).get("message", {})
                 content_blocks = out_msg.get("content", [])
 
-
-                texts = []
+                texts: List[str] = []
                 for block in content_blocks:
                     if "text" in block and block["text"]:
                         texts.append(block["text"])
@@ -185,11 +184,34 @@ def bedrock_converse_ocr_page(
     raise RuntimeError(f"Bedrock OCR failed after {retries} attempts. Last error: {last_err}")
 
 
+def collect_pdf_paths(pdf_or_dir: str, recursive: bool = False) -> List[str]:
+    p = Path(pdf_or_dir)
+
+    if p.is_file():
+        return [p.as_posix()]
+
+    if not p.is_dir():
+        raise FileNotFoundError(f"--pdf path not found: {pdf_or_dir}")
+
+    pattern = "**/*.pdf" if recursive else "*.pdf"
+    return [x.as_posix() for x in sorted(p.glob(pattern)) if x.is_file()]
+
+
 def main():
-    parser = argparse.ArgumentParser(description="OCR a PDF using AWS Bedrock (Llama4 Scout) + Phoenix tracing.")
-    parser.add_argument("--pdf", required=True, help="Path to input PDF")
-    parser.add_argument("--out_json", default="ocr_output.json", help="Output JSON path")
-    parser.add_argument("--out_txt", default="ocr_output.txt", help="Output TXT path")
+    parser = argparse.ArgumentParser(
+        description="OCR PDFs using AWS Bedrock (Llama4 Scout) + Phoenix tracing."
+    )
+    parser.add_argument("--pdf", required=True, help="Path to a PDF OR a folder containing PDFs")
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="If --pdf is a folder, search PDFs recursively",
+    )
+    parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="Directory to write OCR outputs. Default: next to each PDF.",
+    )
     parser.add_argument("--region", default=None, help="AWS region (overrides AWS_REGION env)")
     parser.add_argument("--model_id", default=MODEL_OCR_DEFAULT, help="Bedrock model ID")
     parser.add_argument("--dpi", type=int, default=250, help="PDF->image DPI (higher helps scans)")
@@ -245,44 +267,68 @@ def main():
         config=Config(retries={"max_attempts": 10, "mode": "standard"}),
     )
 
-    with tracer.start_as_current_span("pdf.ocr.pipeline") as span:
-        span.set_attribute("input.pdf", args.pdf)
-        span.set_attribute("bedrock.model_id", args.model_id)
-        span.set_attribute("aws.region", region)
+    pdf_list = collect_pdf_paths(args.pdf, recursive=args.recursive)
+    if not pdf_list:
+        raise SystemExit(f"No PDFs found at: {args.pdf}")
 
-        pages_png = pdf_to_png_bytes(args.pdf, dpi=args.dpi, max_pages=args.max_pages)
+    for pdf_path in pdf_list:
+        pdf_path_obj = Path(pdf_path)
+        pdf_stem = pdf_path_obj.stem
 
-        results: List[Dict[str, Any]] = []
-        all_text_lines: List[str] = []
+        # Decide where to put outputs
+        if args.out_dir:
+            base_dir = Path(args.out_dir)
+        else:
+            base_dir = pdf_path_obj.parent  # default: next to PDF
 
-        for i, png_bytes in enumerate(pages_png, start=1):
-            with tracer.start_as_current_span("pdf.ocr.page") as page_span:
-                page_span.set_attribute("doc.page_number", i)
+        base_dir.mkdir(parents=True, exist_ok=True)
 
-                page_text = bedrock_converse_ocr_page(
-                    brt=brt,
-                    model_id=args.model_id,
-                    image_png_bytes=png_bytes,
-                    page_index=i,
-                    temperature=args.temperature,
-                    max_tokens=args.max_tokens,
+        out_json_path = base_dir / f"{pdf_stem}.ocr.json"
+        out_txt_path = base_dir / f"{pdf_stem}.ocr.txt"
+
+        with tracer.start_as_current_span("pdf.ocr.pipeline") as span:
+            span.set_attribute("input.pdf", pdf_path)
+            span.set_attribute("bedrock.model_id", args.model_id)
+            span.set_attribute("aws.region", region)
+
+            pages_png = pdf_to_png_bytes(pdf_path, dpi=args.dpi, max_pages=args.max_pages)
+
+            results: List[Dict[str, Any]] = []
+            all_text_lines: List[str] = []
+
+            for i, png_bytes in enumerate(pages_png, start=1):
+                with tracer.start_as_current_span("pdf.ocr.page") as page_span:
+                    page_span.set_attribute("doc.page_number", i)
+
+                    page_text = bedrock_converse_ocr_page(
+                        brt=brt,
+                        model_id=args.model_id,
+                        image_png_bytes=png_bytes,
+                        page_index=i,
+                        temperature=args.temperature,
+                        max_tokens=args.max_tokens,
+                    )
+
+                    results.append({"page": i, "text": page_text})
+                    all_text_lines.append(f"===== PAGE {i} =====\n{page_text}\n")
+
+            with open(out_json_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"pdf": pdf_path, "model_id": args.model_id, "pages": results},
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
                 )
 
-                results.append({"page": i, "text": page_text})
-                all_text_lines.append(f"===== PAGE {i} =====\n{page_text}\n")
+            with open(out_txt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(all_text_lines))
 
-        with open(args.out_json, "w", encoding="utf-8") as f:
-            json.dump(
-                {"pdf": args.pdf, "model_id": args.model_id, "pages": results},
-                f,
-                ensure_ascii=False,
-                indent=2,
+            print(
+                f"Done: {pdf_path}\n"
+                f"- JSON: {out_json_path}\n"
+                f"- TXT:  {out_txt_path}\n"
+                f"- Pages: {len(results)}\n"
             )
-
-        with open(args.out_txt, "w", encoding="utf-8") as f:
-            f.write("\n".join(all_text_lines))
-
-        print(f"Done.\n- JSON: {args.out_json}\n- TXT:  {args.out_txt}\n- Pages: {len(results)}")
 
 
 if __name__ == "__main__":
