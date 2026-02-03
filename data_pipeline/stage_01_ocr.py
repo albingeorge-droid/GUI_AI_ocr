@@ -17,6 +17,19 @@ from utils.ocr.bedrock import bedrock_converse_ocr_page
 from utils.ocr.params import load_params, get_ocr_config, get_phoenix_config
 from utils.ocr.s3 import list_pdfs_in_prefix, download_s3_key
 
+def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
+    try:
+        s3_client.head_object(Bucket=bucket, Key=key)
+        return True
+    except s3_client.exceptions.NoSuchKey:
+        return False
+    except Exception as e:
+        # head_object returns 404 via ClientError, not NoSuchKey usually
+        from botocore.exceptions import ClientError
+        if isinstance(e, ClientError) and e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise
+
 
 def _upload_bytes_to_s3(s3_client, bucket: str, key: str, data: bytes, content_type: str | None = None) -> None:
     extra = {}
@@ -137,6 +150,21 @@ def run_stage_01_ocr_from_s3(
             ocr_s3_dir = f"{s3_prefix}{rel_path.parent.as_posix().rstrip('/')}/ocr/"
             out_json_s3_key = f"{ocr_s3_dir}{rel_path.stem}.ocr.json"
             logger.info("S3 output -> %s", out_json_s3_key)
+
+
+            # ✅ SKIP if OCR already exists
+            if _s3_key_exists(s3, bucket=bucket, key=out_json_s3_key):
+                logger.info("Skipping (OCR already exists) -> s3://%s/%s", bucket, out_json_s3_key)
+                manifest.append(
+                    {
+                        "s3_bucket": bucket,
+                        "input_pdf_s3_key": key,
+                        "ocr_json_s3_key": out_json_s3_key,
+                        "status": "skipped_exists",
+                    }
+                )
+                continue
+
 
             # Short-lived temp file for the PDF (required by pdf2image)
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
