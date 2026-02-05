@@ -21,6 +21,8 @@ from utils.fext import (
     HARYANA_CLU_SCHEMA_VERSION,
 )
 
+from json import JSONDecodeError
+
 
 def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
     from botocore.exceptions import ClientError
@@ -252,7 +254,7 @@ def run_stage_02_fext_from_s3(
                 ocr_text=combined_text,
                 doc_id=pdf_stem,
                 temperature=ocr_cfg.temperature,
-                max_tokens=min(ocr_cfg.max_tokens, 1000),
+                max_tokens=min(ocr_cfg.max_tokens, 2000),  # made new change here to solve the json problem
                 retries=ocr_cfg.retries,
                 trace_attrs={
                     "s3.bucket": bucket,
