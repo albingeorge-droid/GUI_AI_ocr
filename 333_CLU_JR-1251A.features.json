@@ -1,24 +1,34 @@
 {
-"applicant_name": "Mehtab Singh",
-"memo_no": "JR/DTP-J/7498/2021",
-"location_controlled_area": "Village Shadpur (khasra no. 30//9/2 (4K-01M)), Additional Controlled Area-II, Bahadurgarh",
-"tehsil": "Bahadurgarh",
-"district": "Jhajjar",
-"purpose": "Setting up of an Industrial Unit (Manufacturing of Lubricating Oils, Grease and Petroleum Based products and pesticides, copper smelter, recycling of used waste plastic, lithium ion battery manufacturing and Recycling of lead acid batteries & Manufacturing etc.)",
-"granted_area": "1962.0 sqm",
-"clu_permission_date": "28-09-2021",
-"conversion_charges": "Rs. 98,100/-",
-"total_external_development_charges": null,
-"terms_and_conditions": [
-"That you shall pay the additional amount of Conversion Charges for any variation in area at site in lump sum within a period of 30 days as and when detected and demanded by the Director, Town & Country Planning, Haryana, Chandigarh.",
-"That you shall pay the balance 40% External Development Charges at the time of acquisition of sector and balance 50% in four annual instalments with 15% interest of the updated rates of EDC.",
-"That you shall give at least 75% employment to the domiciles of Haryana where the posts are not of technical nature and a quarterly statement indicating the category wise total employment to those who belong to Haryana shall be furnished to the G.M.D.I.C. Jhajjar.",
-"That you shall get building plans approved from the Department before commencing the construction at site within six months of the issuance of this permission.",
-"That you shall deposit labour cess at the time of approval of building plan.",
-"That you shall obtain the occupation certificate from the department after completing the building within two years of issuance of this permission.",
-"That the rate for development/construction cost of 24/18 m wide road/major internal road is not included in the EDC rates and you will pay the proportionate cost for acquisition of land along with its construction cost as and when finalized and demanded by the Director Town & Country Planning, Haryana, Chandigarh.",
-"That you shall have no objection to acquire the land for road widening, if any.",
-"That this permission shall be valid for two years from the date of issue of this letter subject to fulfillment of the terms and conditions of the permission granted and agreement executed.",
-"That this permission will not provide any immunity from any other Act/Rules/Regulations applicable to the land in question."
-]
+  "schema_version": "haryana_clu_v1",
+  "model_id": "us.meta.llama4-scout-17b-instruct-v1:0",
+  "s3": {
+    "bucket": "guai",
+    "pdf_key": "Haryana2/333_CLU_JR-1251A/333_CLU_JR-1251A.pdf",
+    "ocr_json_key": "Haryana2/333_CLU_JR-1251A/ocr/333_CLU_JR-1251A.ocr.json",
+    "fext_json_key": "Haryana2/333_CLU_JR-1251A/fext/333_CLU_JR-1251A.features.json"
+  },
+  "features": {
+    "applicant_name": "Mehtab Singh",
+    "memo_no": "JR/DTP-J/7498/2021",
+    "location_controlled_area": "Village Shadpur (khasra no. 30//9/2 (4K-01M)), Additional Controlled Area-II, Bahadurgarh",
+    "tehsil": "Bahadurgarh",
+    "district": "Jhajjar",
+    "purpose": "Setting up of an Industrial Unit (Manufacturing of Lubricating Oils, Grease and Petroleum Based products and pesticides, copper smelter, recycling of used waste plastic, lithium ion battery manufacturing and Recycling of lead acid batteries & Manufacturing etc.)",
+    "granted_area": "1962.0 sqm",
+    "clu_permission_date": "28-09-2021",
+    "conversion_charges": "Rs. 98,100/-",
+    "total_external_development_charges": null,
+    "terms_and_conditions": [
+    "That you shall pay the additional amount of Conversion Charges for any variation in area at site in lump sum within a period of 30 days as and when detected and demanded by the Director, Town & Country Planning, Haryana, Chandigarh.",
+    "That you shall pay the balance 40% External Development Charges at the time of acquisition of sector and balance 50% in four annual instalments with 15% interest of the updated rates of EDC.",
+    "That you shall give at least 75% employment to the domiciles of Haryana where the posts are not of technical nature and a quarterly statement indicating the category wise total employment to those who belong to Haryana shall be furnished to the G.M.D.I.C. Jhajjar.",
+    "That you shall get building plans approved from the Department before commencing the construction at site within six months of the issuance of this permission.",
+    "That you shall deposit labour cess at the time of approval of building plan.",
+    "That you shall obtain the occupation certificate from the department after completing the building within two years of issuance of this permission.",
+    "That the rate for development/construction cost of 24/18 m wide road/major internal road is not included in the EDC rates and you will pay the proportionate cost for acquisition of land along with its construction cost as and when finalized and demanded by the Director Town & Country Planning, Haryana, Chandigarh.",
+    "That you shall have no objection to acquire the land for road widening, if any.",
+    "That this permission shall be valid for two years from the date of issue of this letter subject to fulfillment of the terms and conditions of the permission granted and agreement executed.",
+    "That this permission will not provide any immunity from any other Act/Rules/Regulations applicable to the land in question."
+    ]
+    }
 }
