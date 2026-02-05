@@ -89,6 +89,7 @@ def run_stage_02_fext_from_s3(
     debug_creds: bool = False,
     log_level: str = "INFO",
     upload_log_to_s3: bool = True,
+    force: bool = False,
 ) -> None:
     """
     Stage 02: Feature extraction for Haryana CLU documents.
@@ -206,7 +207,7 @@ def run_stage_02_fext_from_s3(
         )
 
         # Skip if features already exist
-        if _s3_key_exists(s3, bucket=bucket, key=fext_s3_key):
+        if (not force) and _s3_key_exists(s3, bucket=bucket, key=fext_s3_key):
             logger.info("  Skipping (features already exist) -> s3://%s/%s", bucket, fext_s3_key)
             fext_manifest.append(
                 {

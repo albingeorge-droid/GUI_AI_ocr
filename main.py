@@ -29,6 +29,12 @@ def build_parser() -> argparse.ArgumentParser:
     ocr.add_argument("--env-file", default=None, help="Optional env file path (defaults to .env.local)")
     ocr.add_argument("--max-pages", type=int, default=None, help="Limit pages per PDF (for testing)")
     ocr.add_argument("--debug-creds", action="store_true", help="Print whether AWS env vars are present")
+    ocr.add_argument(
+    "--force",
+    action="store_true",
+    help="If set, re-generate OCR output even if it already exists in S3",
+    )
+
 
     # Logging
     ocr.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
@@ -47,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
     fext.add_argument("--debug-creds", action="store_true")
     fext.add_argument("--log-level", default="INFO")
     fext.add_argument("--upload-log-to-s3", action="store_true")
+    fext.add_argument(
+    "--force",
+    action="store_true",
+    help="If set, re-run feature extraction even if features JSON already exists in S3",
+    )
+
 
     # Data cleaning stage
     clean_parser = sub.add_parser(
@@ -108,6 +120,7 @@ def main():
             debug_creds=args.debug_creds,
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
+            force=args.force,
         )
     elif args.command == "fext":
         run_stage_02_fext_from_s3(
@@ -117,6 +130,7 @@ def main():
             debug_creds=args.debug_creds,
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
+            force=args.force,
         )
 
     elif args.command == "clean":

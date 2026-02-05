@@ -17,14 +17,20 @@ class HaryanaCLUPlotFeatures(BaseModel):
     except `terms_and_conditions`, which is a list of bullet/numbered clauses.
     """
 
+
     applicant_name: Optional[str] = None
     memo_no: Optional[str] = None
     location_controlled_area: Optional[str] = None
     tehsil: Optional[str] = None
     district: Optional[str] = None
+
+    # NEW FIELD
+    subject: Optional[str] = None
+
     purpose: Optional[str] = None
     granted_area: Optional[str] = None
     clu_permission_date: Optional[str] = None
     conversion_charges: Optional[str] = None
     total_external_development_charges: Optional[str] = None
+    khasra_numbers: List[str] = Field(default_factory=list)
     terms_and_conditions: List[str] = Field(default_factory=list)

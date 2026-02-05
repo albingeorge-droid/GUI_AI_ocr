@@ -18,19 +18,25 @@ def get_haryana_clu_system_prompt() -> str:
         '    \"location_controlled_area\": string or null,\n'
         '    \"tehsil\": string or null,\n'
         '    \"district\": string or null,\n'
+        '    \"subject\": string or null,\n'
         '    \"purpose\": string or null,\n'
         '    \"granted_area\": string or null,\n'
         '    \"clu_permission_date\": string or null,\n'
         '    \"conversion_charges\": string or null,\n'
         '    \"total_external_development_charges\": string or null,\n'
+        '    \"khasra_numbers\": [string, ...],\n'
         '    \"terms_and_conditions\": [string, ...]\n'
         "  }\n\n"
         "Guidelines:\n"
         "- If a field is not explicitly mentioned or cannot be inferred with high confidence, set it to null.\n"
         "- Use the text as-is for monetary amounts (include currency, units, and formatting as seen).\n"
         "- Do NOT invent values; do NOT guess missing memo numbers or amounts.\n"
+        "- \"subject\": The main subject line or heading of the CLU order / letter, "
+        "e.g. \"Grant of CLU permission for setting up cold storage at Village …\". "
+        "If no explicit subject line is present, use null.\n"
         "- \"granted_area\" should include both numeric value and units (e.g., '2.50 acres', '5000 sq. m.').\n"
         "- \"clu_permission_date\" should be exactly as printed (e.g. '23.09.2014', '23/09/2014').\n"
+        '- "khasra_numbers" should be a list. Extract all khasra/khasra no./khasra nos. mentioned. If none, return [].\n'
         "- \"terms_and_conditions\" should be a list of individual clauses or bullet points. "
         "Strip leading numbering like '(i)', '1.', '(a)' but keep the actual clause text.\n"
         "- Return ONLY valid JSON. Do NOT wrap it in markdown. Do NOT include any explanation.\n"

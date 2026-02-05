@@ -71,6 +71,7 @@ def run_stage_01_ocr_from_s3(
     debug_creds: bool = False,
     log_level: str = "INFO",
     upload_log_to_s3: bool = True,
+    force: bool = False,
 ) -> None:
     """
     OCR PDFs under s3://bucket/<s3_prefix>/ and write OCR JSON back to S3:
@@ -155,7 +156,7 @@ def run_stage_01_ocr_from_s3(
 
 
             # ✅ SKIP if OCR already exists
-            if _s3_key_exists(s3, bucket=bucket, key=out_json_s3_key):
+            if (not force) and _s3_key_exists(s3, bucket=bucket, key=out_json_s3_key):
                 logger.info("Skipping (OCR already exists) -> s3://%s/%s", bucket, out_json_s3_key)
                 manifest.append(
                     {
