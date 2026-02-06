@@ -103,6 +103,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
 
+
+    # Pipeline: OCR -> FEXT -> CLEAN
+    pipeline = sub.add_parser(
+        "pipeline",
+        help="Run Stage 01 OCR, then Stage 02 FEXT, then Stage 03 CLEAN (in order)",
+    )
+    pipeline.add_argument("--S3-prefix", required=True, help="S3 prefix, e.g. 'Haryana2'")
+    pipeline.add_argument("--params", default="params.yaml", help="Path to params.yaml")
+    pipeline.add_argument("--env-file", default=None, help="Optional env file path")
+    pipeline.add_argument("--max-pages", type=int, default=None, help="Limit pages per PDF (testing)")
+    pipeline.add_argument("--clean-mapping-path", default="utils/clean/csv/Haryana_Clean_Data_final_with fileNames.xlsx")
+    pipeline.add_argument("--debug-creds", action="store_true")
+    pipeline.add_argument("--log-level", default="INFO")
+    pipeline.add_argument("--upload-log-to-s3", action="store_true")
+
+    # one force flag controls all 3 stages
+    pipeline.add_argument(
+        "--force",
+        action="store_true",
+        help="If set, re-run OCR/FEXT/CLEAN even if outputs already exist",
+    )
+
+
+
     return p
 
 
@@ -144,6 +168,42 @@ def main():
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
         )
+    elif args.command == "pipeline":
+        # Stage 01: OCR
+        run_stage_01_ocr_from_s3(
+            s3_prefix=args.S3_prefix,
+            params_path=args.params,
+            env_file=args.env_file,
+            max_pages=args.max_pages,
+            debug_creds=args.debug_creds,
+            log_level=args.log_level,
+            upload_log_to_s3=args.upload_log_to_s3,
+            force=args.force,
+        )
+
+        # Stage 02: FEXT
+        run_stage_02_fext_from_s3(
+            s3_prefix=args.S3_prefix,
+            params_path=args.params,
+            env_file=args.env_file,
+            debug_creds=args.debug_creds,
+            log_level=args.log_level,
+            upload_log_to_s3=args.upload_log_to_s3,
+            force=args.force,
+        )
+
+        # Stage 03: CLEAN
+        run_stage_03_clean_from_s3(
+            s3_prefix=args.S3_prefix,
+            params_path=args.params,
+            env_file=args.env_file,
+            clean_mapping_path=args.clean_mapping_path,
+            debug_creds=args.debug_creds,
+            log_level=args.log_level,
+            upload_log_to_s3=args.upload_log_to_s3,
+            force=args.force,
+        )
+
 
     
     else:
