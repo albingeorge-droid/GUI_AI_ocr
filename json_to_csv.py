@@ -23,14 +23,25 @@ def extract_row_from_clean_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     pdf_key = s3_info.get("pdf_key") or ""
     pdf_name = Path(pdf_key).stem if pdf_key else ""
 
-    # Flatten terms_and_conditions into a single string
+    # Flatten terms_and_conditions into a numbered list (multi-line string)
     terms = features.get("terms_and_conditions")
     if isinstance(terms, list):
-        terms_flat = " || ".join(str(t).strip() for t in terms if str(t).strip())
+        cleaned_terms = [str(t).strip() for t in terms if str(t).strip()]
+        terms_flat = "\n".join(f"{i+1}. {t}" for i, t in enumerate(cleaned_terms))
     elif terms is None:
         terms_flat = ""
     else:
-        terms_flat = str(terms)
+        terms_flat = str(terms).strip()
+
+    # Flatten khasra_numbers into a single string
+    khasra = features.get("khasra_numbers")
+    if isinstance(khasra, list):
+        khasra_flat = " || ".join(str(k).strip() for k in khasra if str(k).strip())
+    elif khasra is None:
+        khasra_flat = ""
+    else:
+        khasra_flat = str(khasra)
+
 
     row: Dict[str, Any] = {
         "pdf_name": pdf_name,
@@ -39,8 +50,10 @@ def extract_row_from_clean_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "location_controlled_area": features.get("location_controlled_area"),
         "tehsil": features.get("tehsil"),
         "district": features.get("district"),
+        "subject": features.get("subject"),
+        "khasra_numbers": khasra_flat,
         "purpose": features.get("purpose"),
-        "granted_area": features.get("granted_area"),
+        "granted_area(sq_mtrs)": features.get("granted_area"),
         "clu_permission_date": features.get("clu_permission_date"),
         "conversion_charges": features.get("conversion_charges"),
         "total_external_development_charges": features.get("total_external_development_charges"),
@@ -158,8 +171,10 @@ def main() -> None:
         "location_controlled_area",
         "tehsil",
         "district",
+        "subject",
+        "khasra_numbers",
         "purpose",
-        "granted_area",
+        "granted_area(sq_mtrs)",
         "clu_permission_date",
         "conversion_charges",
         "total_external_development_charges",

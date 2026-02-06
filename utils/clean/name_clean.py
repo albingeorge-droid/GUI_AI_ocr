@@ -6,7 +6,23 @@ from typing import Any, Dict, Optional
 
 # Patterns like: S/o, W/o, C/o, H/o, D/o (and S/0 variant), case-insensitive
 _PARENTAGE_PATTERN = re.compile(
-    r"\b(?:S/0|S/o|W/o|C/o|H/o|D/o)\b",
+    r"\b(?:S\s*/\s*0|S\s*/\s*o|W\s*/\s*o|C\s*/\s*o|H\s*/\s*o|D\s*/\s*o)\b",
+    flags=re.IGNORECASE,
+)
+
+# Person/company honorifics/prefixes at the start of applicant name
+_HONORIFIC_PREFIX_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"M\s*/\s*S\.?|"      # M/s, M/S, M/s.
+    r"Shri\.?|"           # Shri, Shri.
+    r"Sh\.?|"             # Sh, Sh.
+    r"Smt\.?|"            # Smt, Smt.
+    r"Dr\.?|"             # Dr, Dr.
+    r"Mr\.?|"             # Mr, Mr.
+    r"Mrs\.?|"            # Mrs, Mrs.
+    r"Ms\.?|"             # Ms, Ms.
+    r"Kumari\.?"          # Kumari, Kumari.
+    r")\s*",
     flags=re.IGNORECASE,
 )
 
@@ -28,6 +44,12 @@ def _clean_single_name(raw: Any) -> Optional[str]:
     if m:
         # Keep everything before the parentage term
         s = s[: m.start()]
+
+    # ✅ NEW: strip prefixes at the start
+    prev = None
+    while prev != s:
+        prev = s
+        s = _HONORIFIC_PREFIX_PATTERN.sub("", s).strip()
 
     # Strip trailing punctuation and whitespace
     s = s.strip(" ,;-")
