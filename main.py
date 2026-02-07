@@ -1,4 +1,4 @@
-# uv run main.py ocr --S3-prefix "Haryana2"
+# uv run main.py ocr --S3-prefix "Haryana2" --force
 
 # .\.venv-phoenix\Scripts\activate
 # phoenix serve

@@ -47,4 +47,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-# python local_to_aws.py --local_dir "MASTER_PDFS" --top_folder "Haryana"
+# python local_to_aws.py --local_dir "PDFS" --top_folder "Haryana1"

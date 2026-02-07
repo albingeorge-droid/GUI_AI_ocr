@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from botocore.exceptions import ClientError, EndpointConnectionError, ConnectionClosedError
 
 BUCKET = "guai"
-PREFIX = "Haryana2/"   # must end with '/'
+PREFIX = "Haryana1/"   # must end with '/'
 
 # Tune these
 MAX_WORKERS = 20          # try 10-30

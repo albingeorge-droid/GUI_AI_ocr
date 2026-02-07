@@ -17,6 +17,8 @@ from utils.ocr.bedrock import bedrock_converse_ocr_page
 from utils.ocr.params import load_params, get_ocr_config, get_phoenix_config
 from utils.ocr.s3 import list_pdfs_in_prefix, download_s3_key
 from utils.ocr.orientation import auto_rotate_png_bytes
+# new openai set_up
+from utils.ocr.openai_ocr import gpt_ocr_page
 
 
 def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
@@ -84,7 +86,7 @@ def run_stage_01_ocr_from_s3(
 
     Tracing:
       We DO NOT create stage_01_* spans here (to avoid a trace tree).
-      Each Bedrock OCR call produces its OWN ROOT span/trace in utils/ocr/bedrock.py.
+      Each OpenAI OCR call produces its OWN ROOT span/trace.
     """
     load_env(env_file)
 
@@ -116,14 +118,10 @@ def run_stage_01_ocr_from_s3(
         logger.info("Has AWS_ACCESS_KEY_ID: %s", bool(os.getenv("AWS_ACCESS_KEY_ID")))
         logger.info("Has AWS_SECRET_ACCESS_KEY: %s", bool(os.getenv("AWS_SECRET_ACCESS_KEY")))
         logger.info("Has AWS_SESSION_TOKEN: %s", bool(os.getenv("AWS_SESSION_TOKEN")))
+        logger.info("Has OPENAI_API_KEY: %s", bool(os.getenv("OPENAI_API_KEY")))
         logger.info("PHOENIX_OTLP_ENDPOINT: %s", phoenix_endpoint)
 
     s3 = boto3.client("s3", region_name=region, config=BotoConfig(retries={"max_attempts": 10, "mode": "standard"}))
-    brt = boto3.client(
-        "bedrock-runtime",
-        region_name=region,
-        config=BotoConfig(retries={"max_attempts": 10, "mode": "standard"}),
-    )
 
     logger.info(
         "Starting Stage 01 OCR | s3://%s/%s | model=%s | region=%s",
@@ -186,24 +184,12 @@ def run_stage_01_ocr_from_s3(
                 for i, png_bytes in enumerate(pages_png, start=1):
                     logger.info("  OCR page %d/%d", i, total_pages)
 
-                    # ✅ auto-fix sideways/rotated pages
-                    # png_bytes, angle = auto_rotate_png_bytes(png_bytes)
-
-                    # if angle != 0:
-                    #     logger.info("  Applied auto-rotation for page %d -> %d°", i, angle)
-                    # else:
-                    #     logger.info("  No rotation needed for page %d -> 0°", i)
-
-
-                    # Each bedrock call will create its own ROOT trace/span in Phoenix
-                    page_text = bedrock_converse_ocr_page(
-                        brt=brt,
-                        model_id=ocr_cfg.model_id,
+                    # ✅ Each OpenAI call creates its own ROOT trace/span in Phoenix
+                    page_text = gpt_ocr_page(
                         image_png_bytes=png_bytes,
-                        page_index=i,
-                        temperature=ocr_cfg.temperature,
+                        model_id=ocr_cfg.model_id,
                         max_tokens=ocr_cfg.max_tokens,
-                        retries=ocr_cfg.retries,
+                        page_index=i,
                         trace_attrs={
                             "s3.bucket": bucket,
                             "s3.prefix": s3_prefix,
@@ -211,9 +197,9 @@ def run_stage_01_ocr_from_s3(
                             "ocr.output_s3_key": out_json_s3_key,
                             "doc.page_number": i,
                             "doc.total_pages": total_pages,
-                            # "doc.rotation_degrees": angle,
                         },
                     )
+
                     results.append({"page": i, "text": page_text})
 
                 payload = {
