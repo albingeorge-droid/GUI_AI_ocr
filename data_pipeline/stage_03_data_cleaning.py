@@ -23,7 +23,8 @@ from utils.clean import (
 from utils.clean.date_cleaning import clean_clu_permission_date_field
 from utils.clean.charges import clean_charge_fields
 from utils.clean.name_clean import clean_applicant_name_field
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
     from botocore.exceptions import ClientError
@@ -92,6 +93,7 @@ def run_stage_03_clean_from_s3(
     log_level: str = "INFO",
     upload_log_to_s3: bool = True,
     force: bool = False,
+    max_workers: int = 5,   # <-- NEW
 ) -> None:
     """
     Stage 03: Data cleaning for Haryana CLU features.
@@ -180,7 +182,9 @@ def run_stage_03_clean_from_s3(
 
     clean_manifest: List[Dict[str, Any]] = []
 
-    for idx, item in enumerate(manifest, start=1):
+    logger.info("Using up to %d parallel workers for CLEAN", max_workers)
+
+    def process_clean_entry(idx: int, item: Dict[str, Any]) -> Dict[str, Any] | None:
         status = (item.get("status") or "").lower()
         if status not in ("ok", "skipped_exists"):
             logger.info(
@@ -190,7 +194,7 @@ def run_stage_03_clean_from_s3(
                 status,
                 item,
             )
-            continue
+            return None
 
         pdf_key = item.get("input_pdf_s3_key") or item.get("pdf_s3_key")
         fext_json_key = item.get("fext_json_s3_key")
@@ -201,7 +205,7 @@ def run_stage_03_clean_from_s3(
                 len(manifest),
                 item,
             )
-            continue
+            return None
 
         pdf_path = Path(pdf_key)
         base_dir = pdf_path.parent.as_posix().rstrip("/")
@@ -219,27 +223,22 @@ def run_stage_03_clean_from_s3(
             clean_json_key,
         )
 
-        # Skip if cleaned JSON already exists
         if not force and _s3_key_exists(s3, bucket=bucket, key=clean_json_key):
             logger.info(
                 "  Skipping (clean JSON already exists) -> s3://%s/%s",
                 bucket,
                 clean_json_key,
             )
-            clean_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "fext_json_s3_key": fext_json_key,
-                    "clean_json_s3_key": clean_json_key,
-                    "mapping_found": True,  # unknown but irrelevant
-                    "status": "skipped_exists",
-                }
-            )
-            continue
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "fext_json_s3_key": fext_json_key,
+                "clean_json_s3_key": clean_json_key,
+                "mapping_found": True,
+                "status": "skipped_exists",
+            }
 
         try:
-            # ---- Load features JSON from S3 ----
             obj = s3.get_object(Bucket=bucket, Key=fext_json_key)
             raw = obj["Body"].read().decode("utf-8")
             fext_payload = json.loads(raw)
@@ -253,12 +252,8 @@ def run_stage_03_clean_from_s3(
                 )
                 features = {}
 
-            # ---- Find matching CSV row by folder or stem ----
             folder_name = pdf_path.parent.name  # e.g. 114_CLU_ST-2326
-            mapping_row = (
-                mapping.get(folder_name)
-                or mapping.get(pdf_stem)
-            )
+            mapping_row = mapping.get(folder_name) or mapping.get(pdf_stem)
 
             if mapping_row is None:
                 logger.warning(
@@ -273,19 +268,16 @@ def run_stage_03_clean_from_s3(
                 cleaned_features = apply_haryana_csv_overrides(features, mapping_row)
                 mapping_found = True
 
-            # 🚿 Run field-level cleaners
             cleaned_features = clean_clu_permission_date_field(cleaned_features)
             cleaned_features = clean_charge_fields(cleaned_features)
             cleaned_features = clean_applicant_name_field(cleaned_features)
 
-            # ---- Build cleaned payload ----
             cleaned_payload = dict(fext_payload)
             cleaned_payload["features"] = cleaned_features
 
-
-            out_bytes = json.dumps(cleaned_payload, ensure_ascii=False, indent=2).encode(
-                "utf-8"
-            )
+            out_bytes = json.dumps(
+                cleaned_payload, ensure_ascii=False, indent=2
+            ).encode("utf-8")
 
             _upload_bytes_to_s3(
                 s3,
@@ -298,33 +290,40 @@ def run_stage_03_clean_from_s3(
                 "  Uploaded CLEAN JSON -> s3://%s/%s", bucket, clean_json_key
             )
 
-            clean_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "fext_json_s3_key": fext_json_key,
-                    "clean_json_s3_key": clean_json_key,
-                    "mapping_pdf_name": folder_name,
-                    "mapping_found": mapping_found,
-                    "status": "ok",
-                }
-            )
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "fext_json_s3_key": fext_json_key,
+                "clean_json_s3_key": clean_json_key,
+                "mapping_pdf_name": folder_name,
+                "mapping_found": mapping_found,
+                "status": "ok",
+            }
 
         except Exception:
             logger.exception(
                 "  FAILED cleaning for PDF: s3://%s/%s", bucket, pdf_key
             )
-            clean_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "fext_json_s3_key": fext_json_key,
-                    "clean_json_s3_key": clean_json_key,
-                    "mapping_pdf_name": folder_name,
-                    "mapping_found": False,
-                    "status": "error",
-                }
-            )
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "fext_json_s3_key": fext_json_key,
+                "clean_json_s3_key": clean_json_key,
+                "mapping_pdf_name": folder_name,
+                "mapping_found": False,
+                "status": "error",
+            }
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_clean_entry, idx, item): idx
+            for idx, item in enumerate(manifest, start=1)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                clean_manifest.append(result)
+
             # continue to next doc
 
     # ---- Upload Stage 03 manifest ----

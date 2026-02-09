@@ -6,6 +6,9 @@
 # to overside the clean json even if it exists, add --force flag:
 # uv run main.py clean --S3-prefix "Haryana2" --force
 
+# uv run main.py pipeline --S3-prefix "Haryana1" --workers 10
+
+
 import argparse
 from data_pipeline.stage_01_ocr import run_stage_01_ocr_from_s3
 
@@ -44,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="If set, uploads stage_01_ocr.log to S3 under the given prefix",
     )
+    ocr.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for OCR (PDF-level)",
+    )
+
 
     # Feature extraction stage
     fext = sub.add_parser("fext", help="Run Stage 02 feature extraction from OCR outputs in S3")
@@ -58,6 +68,13 @@ def build_parser() -> argparse.ArgumentParser:
     action="store_true",
     help="If set, re-run feature extraction even if features JSON already exists in S3",
     )
+    fext.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for feature extraction",
+    )
+
 
 
     # Data cleaning stage
@@ -101,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Re-write clean JSON even if it already exists",
     )
+    clean_parser.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for data cleaning",
+    )
+
 
 
 
@@ -124,6 +148,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="If set, re-run OCR/FEXT/CLEAN even if outputs already exist",
     )
+    pipeline.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for each stage",
+    )
+
 
 
 
@@ -145,6 +176,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
     elif args.command == "fext":
         run_stage_02_fext_from_s3(
@@ -155,6 +187,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
 
     elif args.command == "clean":
@@ -167,6 +200,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
     elif args.command == "pipeline":
         # Stage 01: OCR
@@ -179,6 +213,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
 
         # Stage 02: FEXT
@@ -190,6 +225,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
 
         # Stage 03: CLEAN
@@ -202,6 +238,7 @@ def main():
             log_level=args.log_level,
             upload_log_to_s3=args.upload_log_to_s3,
             force=args.force,
+            max_workers=args.workers,
         )
 
 

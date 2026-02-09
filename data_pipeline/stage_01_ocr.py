@@ -20,6 +20,9 @@ from utils.ocr.orientation import auto_rotate_png_bytes
 # new openai set_up
 from utils.ocr.openai_ocr import gpt_ocr_page
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
 
 def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
     try:
@@ -74,6 +77,7 @@ def run_stage_01_ocr_from_s3(
     log_level: str = "INFO",
     upload_log_to_s3: bool = True,
     force: bool = False,
+    max_workers: int = 5,  # <-- NEW
 ) -> None:
     """
     OCR PDFs under s3://bucket/<s3_prefix>/ and write OCR JSON back to S3:
@@ -137,10 +141,13 @@ def run_stage_01_ocr_from_s3(
         return
 
     logger.info("Found %d PDFs under s3://%s/%s", len(pdf_keys), bucket, s3_prefix)
-
+    
     manifest: List[Dict[str, Any]] = []
 
-    for idx, key in enumerate(pdf_keys, start=1):
+    logger.info("Using up to %d parallel workers for OCR", max_workers)
+
+    # Worker that processes a single PDF key
+    def process_single_pdf(idx: int, key: str) -> Dict[str, Any] | None:
         try:
             logger.info("[%d/%d] Processing: s3://%s/%s", idx, len(pdf_keys), bucket, key)
 
@@ -152,20 +159,15 @@ def run_stage_01_ocr_from_s3(
             out_json_s3_key = f"{ocr_s3_dir}{rel_path.stem}.ocr.json"
             logger.info("S3 output -> %s", out_json_s3_key)
 
-
             # ✅ SKIP if OCR already exists
             if (not force) and _s3_key_exists(s3, bucket=bucket, key=out_json_s3_key):
                 logger.info("Skipping (OCR already exists) -> s3://%s/%s", bucket, out_json_s3_key)
-                manifest.append(
-                    {
-                        "s3_bucket": bucket,
-                        "input_pdf_s3_key": key,
-                        "ocr_json_s3_key": out_json_s3_key,
-                        "status": "skipped_exists",
-                    }
-                )
-                continue
-
+                return {
+                    "s3_bucket": bucket,
+                    "input_pdf_s3_key": key,
+                    "ocr_json_s3_key": out_json_s3_key,
+                    "status": "skipped_exists",
+                }
 
             # Short-lived temp file for the PDF (required by pdf2image)
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
@@ -184,7 +186,6 @@ def run_stage_01_ocr_from_s3(
                 for i, png_bytes in enumerate(pages_png, start=1):
                     logger.info("  OCR page %d/%d", i, total_pages)
 
-                    # ✅ Each OpenAI call creates its own ROOT trace/span in Phoenix
                     page_text = gpt_ocr_page(
                         image_png_bytes=png_bytes,
                         model_id=ocr_cfg.model_id,
@@ -218,17 +219,14 @@ def run_stage_01_ocr_from_s3(
                 )
                 logger.info("Uploaded OCR JSON -> s3://%s/%s", bucket, out_json_s3_key)
 
-                manifest.append(
-                    {
-                        "s3_bucket": bucket,
-                        "input_pdf_s3_key": key,
-                        "ocr_json_s3_key": out_json_s3_key,
-                        "pages": len(results),
-                    }
-                )
+                return {
+                    "s3_bucket": bucket,
+                    "input_pdf_s3_key": key,
+                    "ocr_json_s3_key": out_json_s3_key,
+                    "pages": len(results),
+                }
 
             finally:
-                # delete temp file immediately (no local storage retained)
                 try:
                     os.remove(tmp_pdf_path)
                     logger.info("Deleted temp file -> %s", tmp_pdf_path)
@@ -237,6 +235,25 @@ def run_stage_01_ocr_from_s3(
 
         except Exception:
             logger.exception("FAILED processing PDF: s3://%s/%s", bucket, key)
+            # You can choose to return an error entry if you want to track failures
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": key,
+                "ocr_json_s3_key": None,
+                "status": "error",
+            }
+
+    # Run PDFs in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_single_pdf, idx, key): key
+            for idx, key in enumerate(pdf_keys, start=1)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                manifest.append(result)
+
             # continue
 
     # Upload manifest to S3

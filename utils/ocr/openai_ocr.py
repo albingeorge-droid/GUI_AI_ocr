@@ -54,14 +54,39 @@ def gpt_ocr_page(
     # Log image size for debugging
     logger.debug(f"Page {page_index}: Image size = {len(image_png_bytes)} bytes, base64 size = {len(base64_image)} chars")
 
-    prompt = (
-        "You are an OCR engine. Read all legible text from this document page and "
-        "return it as plain text.\n"
-        "- Preserve line breaks when it makes sense.\n"
-        "- Do NOT summarize.\n"
-        "- Do NOT add any commentary.\n"
-        "- Just return the raw text."
-    )
+    prompt = """
+    You are a strict OCR engine for legal / land-record documents.
+
+    Your job is to read all legible text from the page and output it exactly as written, character by character.
+
+    Rules:
+    1. Do NOT summarize, paraphrase, or explain anything. Just copy the text.
+    2. Do NOT “fix” spelling, grammar, or formatting, even if it looks wrong.
+    3. Copy numbers and punctuation exactly, including spaces, commas, periods, hyphens (-), and all types of slashes (/).
+    4. Do not normalize or simplify text in any way.
+
+    SPECIAL RULE – KHASRA / RECT–KILLA NUMBERS (VERY IMPORTANT):
+    - Lines that mention words like:
+    “khasra”, “khasra Nos.”, “khasra no.”, “Rect/Killa Nos.”, “Rect/Killa”, “killa”
+    usually contain land parcel numbers that MUST be copied exactly.
+
+    - In these lines, you must preserve EVERY slash exactly as shown.
+    Examples of CORRECT copying:
+        Image:  143//15/2/2    → Output:  143//15/2/2
+        Image:  144//11        → Output:  144//11
+        Image:  29//15/1       → Output:  29//15/1
+        Image:  154//5         → Output:  154//5
+
+    - NEVER change:
+        143//15/2/2  to  143/15/2/2
+        144//11      to  144/11
+        29//15/1     to  29/15/1
+    Output format:
+    - Return ONLY the raw text you read from the page.
+    - Preserve line breaks where they appear in the document.
+    - Do NOT add any commentary, labels, or extra text.
+    """
+
 
     messages = [
         {
@@ -123,6 +148,7 @@ def gpt_ocr_page(
             resp = client.chat.completions.create(
                 model=model_id,
                 messages=messages,
+                # reasoning={"effort": "low"},
                 # DO NOT include max_completion_tokens for gpt-5-nano
             )
 

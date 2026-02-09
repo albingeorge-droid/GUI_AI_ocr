@@ -163,17 +163,17 @@ def main():
     missing_ocr_sorted = sorted([p for p in missing_ocr if p != "UNKNOWN_PARENT"])
     missing_fext_sorted = sorted([p for p in missing_fext if p != "UNKNOWN_PARENT"])
 
-    if missing_ocr_sorted:
-        print("Folders missing ocr/:")
-        for p in missing_ocr_sorted:
-            print(" -", p)
-        print()
+    # if missing_ocr_sorted:
+    #     print("Folders missing ocr/:")
+    #     for p in missing_ocr_sorted:
+    #         print(" -", p)
+    #     print()
 
-    if missing_fext_sorted:
-        print("Folders missing fext/:")
-        for p in missing_fext_sorted:
-            print(" -", p)
-        print()
+    # if missing_fext_sorted:
+    #     print("Folders missing fext/:")
+    #     for p in missing_fext_sorted:
+    #         print(" -", p)
+    #     print()
 
 
 if __name__ == "__main__":

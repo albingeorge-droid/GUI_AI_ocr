@@ -23,6 +23,9 @@ from utils.fext import (
 
 from json import JSONDecodeError
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
 
 def _s3_key_exists(s3_client, bucket: str, key: str) -> bool:
     from botocore.exceptions import ClientError
@@ -90,6 +93,7 @@ def run_stage_02_fext_from_s3(
     log_level: str = "INFO",
     upload_log_to_s3: bool = True,
     force: bool = False,
+    max_workers: int = 5,  # <-- NEW
 ) -> None:
     """
     Stage 02: Feature extraction for Haryana CLU documents using OpenAI GPT-5-nano.
@@ -174,7 +178,9 @@ def run_stage_02_fext_from_s3(
 
     fext_manifest: List[Dict[str, Any]] = []
 
-    for idx, item in enumerate(manifest, start=1):
+    logger.info("Using up to %d parallel workers for FEXT", max_workers)
+
+    def process_manifest_entry(idx: int, item: Dict[str, Any]) -> Dict[str, Any] | None:
         pdf_key = item.get("input_pdf_s3_key") or item.get("pdf_s3_key")
         ocr_json_key = item.get("ocr_json_s3_key")
 
@@ -185,7 +191,7 @@ def run_stage_02_fext_from_s3(
                 len(manifest),
                 item,
             )
-            continue
+            return None
 
         pdf_path = Path(pdf_key)
         base_dir = pdf_path.parent.as_posix().rstrip("/")
@@ -206,16 +212,13 @@ def run_stage_02_fext_from_s3(
         # Skip if features already exist
         if (not force) and _s3_key_exists(s3, bucket=bucket, key=fext_s3_key):
             logger.info("  Skipping (features already exist) -> s3://%s/%s", bucket, fext_s3_key)
-            fext_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "ocr_json_s3_key": ocr_json_key,
-                    "fext_json_s3_key": fext_s3_key,
-                    "status": "skipped_exists",
-                }
-            )
-            continue
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "ocr_json_s3_key": ocr_json_key,
+                "fext_json_s3_key": fext_s3_key,
+                "status": "skipped_exists",
+            }
 
         try:
             # Load OCR JSON
@@ -232,26 +235,22 @@ def run_stage_02_fext_from_s3(
 
             if not page_texts:
                 logger.warning("  No OCR text found for %s (pages empty)", pdf_key)
-                fext_manifest.append(
-                    {
-                        "s3_bucket": bucket,
-                        "input_pdf_s3_key": pdf_key,
-                        "ocr_json_s3_key": ocr_json_key,
-                        "fext_json_s3_key": fext_s3_key,
-                        "status": "no_ocr_text",
-                    }
-                )
-                continue
+                return {
+                    "s3_bucket": bucket,
+                    "input_pdf_s3_key": pdf_key,
+                    "ocr_json_s3_key": ocr_json_key,
+                    "fext_json_s3_key": fext_s3_key,
+                    "status": "no_ocr_text",
+                }
 
             combined_text = "\n\n".join(page_texts)
 
-            # ✅ Call OpenAI GPT-5-nano to extract features
             features = openai_extract_haryana_features(
                 model_id=ocr_cfg.model_id,
                 ocr_text=combined_text,
                 doc_id=pdf_stem,
                 temperature=ocr_cfg.temperature,
-                max_tokens=ocr_cfg.max_tokens,  # Note: Ignored by gpt-5-nano
+                max_tokens=ocr_cfg.max_tokens,
                 retries=ocr_cfg.retries,
                 trace_attrs={
                     "s3.bucket": bucket,
@@ -284,27 +283,34 @@ def run_stage_02_fext_from_s3(
             )
             logger.info("  Uploaded features JSON -> s3://%s/%s", bucket, fext_s3_key)
 
-            fext_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "ocr_json_s3_key": ocr_json_key,
-                    "fext_json_s3_key": fext_s3_key,
-                    "status": "ok",
-                }
-            )
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "ocr_json_s3_key": ocr_json_key,
+                "fext_json_s3_key": fext_s3_key,
+                "status": "ok",
+            }
 
         except Exception:
             logger.exception("  FAILED feature extraction for PDF: s3://%s/%s", bucket, pdf_key)
-            fext_manifest.append(
-                {
-                    "s3_bucket": bucket,
-                    "input_pdf_s3_key": pdf_key,
-                    "ocr_json_s3_key": ocr_json_key,
-                    "fext_json_s3_key": fext_s3_key,
-                    "status": "error",
-                }
-            )
+            return {
+                "s3_bucket": bucket,
+                "input_pdf_s3_key": pdf_key,
+                "ocr_json_s3_key": ocr_json_key,
+                "fext_json_s3_key": fext_s3_key,
+                "status": "error",
+            }
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_manifest_entry, idx, item): idx
+            for idx, item in enumerate(manifest, start=1)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                fext_manifest.append(result)
+
             # continue to next doc
 
     # Upload Stage 02 manifest

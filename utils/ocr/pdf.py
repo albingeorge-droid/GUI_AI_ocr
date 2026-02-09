@@ -41,7 +41,7 @@ def _downscale_if_needed(img: Image.Image) -> Image.Image:
 
 def pdf_to_png_bytes(
     pdf_path: str,
-    dpi: int = 180,                 # lower default DPI to keep images sane
+    dpi: int = 250,                 # lower default DPI to keep images sane
     max_pages: int | None = None,
 ) -> List[bytes]:
     """
