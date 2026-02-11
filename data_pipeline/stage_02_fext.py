@@ -16,10 +16,9 @@ from opentelemetry import trace
 from utils.ocr.env import load_env
 from utils.ocr.tracing import setup_tracing
 from utils.ocr.params import load_params, get_ocr_config, get_phoenix_config
-from utils.fext import (
-    openai_extract_haryana_features,
-    HARYANA_CLU_SCHEMA_VERSION,
-)
+from utils.fext import HARYANA_CLU_SCHEMA_VERSION
+from utils.fext.bedrock import bedrock_converse_extract_haryana_features
+
 
 from json import JSONDecodeError
 
@@ -154,8 +153,16 @@ def run_stage_02_fext_from_s3(
         config=BotoConfig(retries={"max_attempts": 10, "mode": "standard"}),
     )
 
+    # Bedrock runtime client for Llama 4 Scout
+    bedrock_runtime = boto3.client(
+        "bedrock-runtime",
+        region_name=region,
+        config=BotoConfig(retries={"max_attempts": 3, "mode": "standard"}),
+    )
+
+
     logger.info(
-        "Starting Stage 02 FEXT (OpenAI) | s3://%s/%s | model=%s | region=%s",
+        "Starting Stage 02 FEXT (Bedrock) | s3://%s/%s | model=%s | region=%s",
         bucket,
         s3_prefix,
         ocr_cfg.model_id,
@@ -246,12 +253,13 @@ def run_stage_02_fext_from_s3(
             combined_text = "\n\n".join(page_texts)
 
             # ✅ Call OpenAI GPT-5-nano to extract features
-            features = openai_extract_haryana_features(
-                model_id=ocr_cfg.model_id,
+            features = bedrock_converse_extract_haryana_features(
+                brt=bedrock_runtime,
+                model_id=ocr_cfg.model_id,   # will be your Llama 4 Scout model ID
                 ocr_text=combined_text,
                 doc_id=pdf_stem,
                 temperature=ocr_cfg.temperature,
-                max_tokens=ocr_cfg.max_tokens,  # Note: Ignored by gpt-5-nano
+                max_tokens=ocr_cfg.max_tokens,
                 retries=ocr_cfg.retries,
                 trace_attrs={
                     "s3.bucket": bucket,
@@ -261,6 +269,7 @@ def run_stage_02_fext_from_s3(
                     "fext.output_s3_key": fext_s3_key,
                 },
             )
+
 
             out_payload = {
                 "schema_version": HARYANA_CLU_SCHEMA_VERSION,

@@ -123,6 +123,13 @@ def run_stage_01_ocr_from_s3(
 
     s3 = boto3.client("s3", region_name=region, config=BotoConfig(retries={"max_attempts": 10, "mode": "standard"}))
 
+    # NEW: Bedrock runtime client for Llama 4 Scout
+    bedrock_runtime = boto3.client(
+        "bedrock-runtime",
+        region_name=region,   # same region where you enabled Llama 4 Scout
+        config=BotoConfig(retries={"max_attempts": 10, "mode": "standard"}),
+    )
+
     logger.info(
         "Starting Stage 01 OCR | s3://%s/%s | model=%s | region=%s",
         bucket,
@@ -185,11 +192,14 @@ def run_stage_01_ocr_from_s3(
                     logger.info("  OCR page %d/%d", i, total_pages)
 
                     # ✅ Each OpenAI call creates its own ROOT trace/span in Phoenix
-                    page_text = gpt_ocr_page(
-                        image_png_bytes=png_bytes,
+                    page_text = bedrock_converse_ocr_page(
+                        brt=bedrock_runtime,
                         model_id=ocr_cfg.model_id,
-                        max_tokens=ocr_cfg.max_tokens,
+                        image_png_bytes=png_bytes,
                         page_index=i,
+                        temperature=ocr_cfg.temperature,
+                        max_tokens=ocr_cfg.max_tokens,
+                        retries=ocr_cfg.retries,
                         trace_attrs={
                             "s3.bucket": bucket,
                             "s3.prefix": s3_prefix,
@@ -199,6 +209,7 @@ def run_stage_01_ocr_from_s3(
                             "doc.total_pages": total_pages,
                         },
                     )
+
 
                     results.append({"page": i, "text": page_text})
 

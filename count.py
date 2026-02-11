@@ -12,6 +12,7 @@ Prints:
 ✅ AWS creds assumed in env
 ✅ Safe parallelism + exponential backoff on throttling/transient errors
 """
+import json
 
 import boto3
 import random
@@ -85,9 +86,12 @@ def list_parent_folders(bucket: str, prefix: str):
 
 def check_one_parent(parent_prefix: str):
     """
-    For a given parent folder (e.g., Haryana/1_CLU_GN-1199/),
-    check if it contains subfolders ocr/ and fext/
+    For a given parent folder (e.g., Haryana1/1_CLU_KL-550/),
+    check:
+      - if it contains ocr/ and fext/
+      - if OCR JSON (if any) has non-empty text
     """
+    # 1) list subfolders under the parent
     resp = s3_list_objects_v2_with_retries(
         Bucket=BUCKET,
         Prefix=parent_prefix,
@@ -98,7 +102,58 @@ def check_one_parent(parent_prefix: str):
 
     has_ocr = (parent_prefix + "ocr/") in subs
     has_fext = (parent_prefix + "fext/") in subs
-    return parent_prefix, has_ocr, has_fext
+
+    # None => no ocr/ folder, True/False => ocr exists and we inspected it
+    ocr_has_nonempty_text = None
+
+    if has_ocr:
+        ocr_prefix = parent_prefix + "ocr/"
+
+        # 2) list objects under ocr/ and find any *.ocr.json
+        try:
+            ocr_resp = s3_list_objects_v2_with_retries(
+                Bucket=BUCKET,
+                Prefix=ocr_prefix,
+                MaxKeys=1000,
+            )
+        except Exception as e:
+            print(f"[WARN] Failed to list OCR objects under {ocr_prefix}: {e}")
+            ocr_has_nonempty_text = False
+        else:
+            contents = ocr_resp.get("Contents", []) or []
+            ocr_keys = [
+                obj["Key"]
+                for obj in contents
+                if obj.get("Key", "").endswith(".ocr.json")
+            ]
+
+            if not ocr_keys:
+                # ocr/ folder exists but no ocr.json files
+                ocr_has_nonempty_text = False
+            else:
+                # 3) inspect the FIRST ocr.json (you can loop all if you want)
+                ocr_key = ocr_keys[0]
+                try:
+                    obj = s3.get_object(Bucket=BUCKET, Key=ocr_key)
+                    raw = obj["Body"].read().decode("utf-8")
+                    payload = json.loads(raw)
+
+                    pages = payload.get("pages", []) or []
+                    any_nonempty = False
+                    for p in pages:
+                        txt = (p.get("text") or "").strip()
+                        if txt:
+                            any_nonempty = True
+                            break
+
+                    ocr_has_nonempty_text = any_nonempty
+
+                except Exception as e:
+                    print(f"[WARN] Failed to inspect OCR JSON {ocr_key}: {e}")
+                    ocr_has_nonempty_text = False
+
+    return parent_prefix, has_ocr, has_fext, ocr_has_nonempty_text
+
 
 
 def main():
@@ -113,6 +168,10 @@ def main():
     ocr_count = 0
     fext_count = 0
 
+    # NEW: stats for OCR contents
+    ocr_nonempty_count = 0          # folders with ocr/ and some text
+    ocr_empty_or_bad = []           # folders with ocr/ but empty / bad OCR
+
     done = 0
     start = time.time()
 
@@ -122,23 +181,38 @@ def main():
         for fut in as_completed(futures):
             done += 1
             try:
-                parent, has_ocr, has_fext = fut.result()
+                parent, has_ocr, has_fext, ocr_has_nonempty_text = fut.result()
             except Exception as e:
-                # treat failures as missing + report
                 parent = "UNKNOWN_PARENT"
                 has_ocr = False
                 has_fext = False
+                ocr_has_nonempty_text = None
                 print(f"[ERROR] A folder check failed: {e}")
 
+            # ocr/ stats
             if has_ocr:
                 ocr_count += 1
+                if ocr_has_nonempty_text is True:
+                    ocr_nonempty_count += 1
+                elif ocr_has_nonempty_text is False:
+                    # we found ocr/, but no text / broken json / no pages
+                    ocr_empty_or_bad.append(parent)
             else:
                 missing_ocr.append(parent)
 
+            # fext/ stats
             if has_fext:
                 fext_count += 1
             else:
                 missing_fext.append(parent)
+
+            # progress every 100
+            if done % 100 == 0 or done == total:
+                elapsed = time.time() - start
+                rate = done / elapsed if elapsed > 0 else 0
+                eta = (total - done) / rate if rate > 0 else 0
+                print(f"Progress: {done}/{total} | {rate:.1f} folders/s | ETA ~ {eta:.0f}s")
+
 
             # progress every 100
             if done % 100 == 0 or done == total:
@@ -155,9 +229,20 @@ def main():
     print(f"Folders with ocr/   : {ocr_count}")
     print(f"Folders with fext/  : {fext_count}")
     print("-------------------------------------")
+    print(f"Folders with ocr/ & non-empty text : {ocr_nonempty_count}")
+    print(f"Folders with ocr/ but empty/bad    : {len(ocr_empty_or_bad)}")
+    print("-------------------------------------")
+
     print(f"Missing ocr/ count  : {len(missing_ocr)}")
     print(f"Missing fext/ count : {len(missing_fext)}")
     print("=====================================\n")
+
+
+    if ocr_empty_or_bad:
+        print("Folders with ocr/ but empty or invalid OCR JSON:")
+        for p in sorted(ocr_empty_or_bad):
+            print(" -", p)
+        print()
 
     # Sort for nicer output
     missing_ocr_sorted = sorted([p for p in missing_ocr if p != "UNKNOWN_PARENT"])

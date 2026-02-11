@@ -3,7 +3,7 @@ ocr:
   region: "us-east-2"
 
   # GPT-5-nano (latest alias)
-  model_id: "gpt-5-nano"
+  model_id: "us.meta.llama4-scout-17b-instruct-v1:0"
   dpi: 250
   temperature: 0.0
   max_tokens: 2500
