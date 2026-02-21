@@ -39,11 +39,11 @@ ARTIFACTS_0_100 = [
     # "3197_prehlad_singh_sethi_22-66wpb/",
     # "3198_virender_kumar_sehgal_19epb/",
     # "3199_kewal_krishan_sood_12-4epb/",
-    "4998_CLU_MT-737A/",
-    "4999_CLU_PL-1653A/",
-    "5001_CLU_FD-1462A/",
-    "500_CLU_GN-1466/",
-    "5012_CLU_KL-1061A/",
+    "4658_CLU_RK-994/",
+    "2351_CLU_GN-1778/",
+    "2223_CLU_GN-2511/",
+    "7432_CLU_PT-1719A/",
+
 
 ]
 
@@ -173,7 +173,7 @@ def main():
     args = parser.parse_args()
 
     # --- Execution (matches your PS script default) ---
-    move_folders(dest="Haryana3", folders=ARTIFACTS_0_100, move=args.move, dry_run=args.dry_run)
+    move_folders(dest="Haryana4", folders=ARTIFACTS_0_100, move=args.move, dry_run=args.dry_run)
     # move_folders(dest="artifacts_5-11_100-200", folders=ARTIFACTS_100_200, move=args.move, dry_run=args.dry_run)
     # move_folders(dest="artifacts_5-11_200-and", folders=ARTIFACTS_200_PLUS, move=args.move, dry_run=args.dry_run)
 

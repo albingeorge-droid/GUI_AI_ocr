@@ -142,7 +142,7 @@ def apply_haryana_csv_overrides(
         "district": ["District"],
         "purpose": ["Purpose"],
         "clu_permission_date": ["CLU Permission on", "CLU Permission On"],
-        "granted_area": ["Granted Area(sqm)", "Granted Area (sqm)"],
+        "granted_area": ["granted_area_sqm"],
     }
 
     for feat_key, candidates in overrides.items():

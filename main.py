@@ -4,7 +4,7 @@
 # phoenix serve
 
 # to overside the clean json even if it exists, add --force flag:
-# uv run main.py ocr --S3-prefix "Haryana3" --force
+# uv run main.py clean --S3-prefix "Haryana1" --force
 
 import argparse
 from data_pipeline.stage_01_ocr import run_stage_01_ocr_from_s3
